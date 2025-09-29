@@ -18,6 +18,8 @@ If the answer is "No," the feature belongs in the service's own codebase, not he
 
 ## **Core Features**
 
+### **1\. Standard Server Lifecycle**
+
 The BaseServer component provides the following out-of-the-box:
 
 * **Standard HTTP Server Lifecycle**: A blocking Start() method and a graceful Shutdown(ctx) method.
@@ -26,7 +28,18 @@ The BaseServer component provides the following out-of-the-box:
     * GET /readyz: A readiness probe that returns 200 OK only after the service explicitly signals it's ready via the SetReady(true) method.
     * GET /metrics: Exposes application metrics in the Prometheus format.
 * **Dynamic Port Allocation**: Supports using port :0 for automatic port assignment during tests.
-* **JSON Response Helpers**: A simple response package for sending standardized JSON responses and errors.
+
+### **2\. Secure Authentication Middleware (JWT)**
+
+The library provides a secure, production-ready middleware for validating JSON Web Tokens (JWTs).
+
+* **Asymmetric RS256 Validation**: The NewJWKSAuthMiddleware is the recommended middleware for all new services. It validates tokens using the industry-standard RS256 algorithm by fetching public keys from a standard JWKS endpoint. This is a highly secure pattern that eliminates the need for shared secrets between services.
+* **Automatic Key Caching & Rotation**: The middleware automatically caches the fetched public keys and refreshes them periodically, ensuring high performance and seamless key rotation.
+* **Legacy Support (DEPRECATED)**: For backward compatibility, the NewLegacySharedSecretAuthMiddleware is available, but it uses the less secure shared-secret (HS256) pattern and should not be used for new development.
+
+### **3\. Standardized JSON Responses**
+
+* **JSON Response Helpers**: A simple response package for sending standardized JSON payloads and errors ({"error": "message"}), ensuring a consistent API experience for clients.
 
 ## **Usage Example**
 
@@ -35,74 +48,25 @@ The BaseServer component provides the following out-of-the-box:
 Embed the microservice.BaseServer struct into your service's main wrapper.
 
 // In your service's main package (e.g., /keyservice/service.go)  
-````go
 package keyservice
 
 import (  
-    "net/http"  
-    "github.com/rs/zerolog"
+"net/http"  
+"\[github.com/rs/zerolog\](https://github.com/rs/zerolog)"
 
     // Import the base library  
-    "github.com/illmade-knight/go-microservice-base/pkg/microservice"  
-    "github.com/illmade-knight/go-microservice-base/pkg/response"  
+    "\[github.com/illmade-knight/go-microservice-base/pkg/microservice\](https://github.com/illmade-knight/go-microservice-base/pkg/microservice)"  
 )
 
 type Wrapper struct {  
-    *microservice.BaseServer  
-    // ... other dependencies like database clients, etc.  
+\*microservice.BaseServer  
+// ... other dependencies like database clients, etc.  
 }
 
-func New(cfg *Config, logger zerolog.Logger /*, ...other deps \*/) *Wrapper {  
-    baseServer := microservice.NewBaseServer(logger, cfg.HTTPListenAddr)
+func New(cfg \*Config, logger zerolog.Logger /\*, ...other deps \*/) \*Wrapper {  
+baseServer := microservice.NewBaseServer(logger, cfg.HTTPListenAddr)
 
-    // Get the mux and register your service-specific API handlers  
-    mux := baseServer.Mux()  
-    // mux.Handle("POST /api/v1/...", myApiHandler)  
-      
-    return &Wrapper{ BaseServer: baseServer }  
-}
-
-````
-
-### **2\. Signaling Readiness**
-
-In your main.go, after all dependencies are successfully initialized, you must signal that the service is ready.
-
-// In your service's main executable (e.g., cmd/keyservice/main.go)  
-````go
-func main() {  
-// ... load config, create logger, init database client ...
-
-    service := keyservice.New(cfg, logger, dbClient)  
-      
-    // After all dependencies are ready, mark the service as ready to serve traffic.  
-    service.SetReady(true)
-
-    // ... start the server and handle graceful shutdown ...  
-}
-````
-
-### **3\. Using Standardized JSON Errors**
-
-In your API handlers, use the response package to send consistent error messages.
-
-// In your service's API handlers (e.g., internal/api/handlers.go)  
-````go
-import "github.com/illmade-knight/go-microservice-base/pkg/response)"
-
-func (a *API) GetThingHandler(w http.ResponseWriter, r *http.Request) {  
-    thing, err := a.Store.GetThing("some-id")  
-    if err != nil {  
-        // Instead of http.Error(w, "...", 500\)  
-        response.WriteJSONError(w, http.StatusNotFound, "the requested thing could not be found")  
-        return  
-    }
-
-    response.WriteJSON(w, http.StatusOK, thing)  
-}
-````
-## **Development Plan**
-
-* \[x\] **Phase 1: Foundation**: Basic BaseServer with Start/Shutdown and /healthz.
-* \[x\] **Phase 2: Observability**: Added /readyz probe and /metrics endpoint.
-* \[x\] **Phase 3: Helper Utilities**: Added response package for standardized JSON errors.
+    // ... register your handlers on baseServer.Mux() ...  
+        
+    return \&Wrapper{ BaseServer: baseServer }  
+}  

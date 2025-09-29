@@ -2,6 +2,7 @@ package microservice_test
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"sync"
@@ -26,7 +27,7 @@ func TestBaseServer_LifecycleAndProbes(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		err := server.Start()
-		if err != nil && err != http.ErrServerClosed {
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			t.Errorf("server.Start() returned an unexpected error: %v", err)
 		}
 	}()
@@ -45,7 +46,7 @@ func TestBaseServer_LifecycleAndProbes(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	body, _ := io.ReadAll(resp.Body)
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	assert.Equal(t, "OK", string(body))
 
 	// 2. Test initial /readyz state (should be NOT READY)
@@ -53,7 +54,7 @@ func TestBaseServer_LifecycleAndProbes(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
 	body, _ = io.ReadAll(resp.Body)
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	assert.Equal(t, "NOT READY", string(body))
 
 	// 3. Mark the server as ready and test /readyz again
@@ -62,14 +63,14 @@ func TestBaseServer_LifecycleAndProbes(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	body, _ = io.ReadAll(resp.Body)
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	assert.Equal(t, "READY", string(body))
 
 	// 4. Test /metrics endpoint (just check for 200 OK)
 	resp, err = http.Get(serverURL + "/metrics")
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
-	resp.Body.Close()
+	_ = resp.Body.Close()
 
 	// 5. Test shutdown
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
