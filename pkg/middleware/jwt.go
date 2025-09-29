@@ -18,6 +18,28 @@ type contextKey string
 // userContextKey is the key used to store the authenticated user's ID from the JWT.
 const userContextKey contextKey = "userID"
 
+// JWKSManager defines the interface for a key set manager that can be used
+// for manual token validation in non-HTTP contexts (e.g., WebSockets).
+type JWKSManager jwk.Set
+
+// NewJWKSManager creates a new, auto-refreshing JWKS key set from a remote URL.
+// This is the building block for manual token validation.
+func NewJWKSManager(jwksURL string) (JWKSManager, error) {
+	cache := jwk.NewCache(context.Background())
+	err := cache.Register(jwksURL, jwk.WithRefreshInterval(15*time.Minute))
+	if err != nil {
+		return nil, fmt.Errorf("failed to register JWKS URL: %w", err)
+	}
+
+	// Trigger an initial fetch to ensure the URL is valid and keys are available on startup.
+	_, err = cache.Refresh(context.Background(), jwksURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to perform initial JWKS fetch: %w", err)
+	}
+
+	return jwk.NewCachedSet(cache, jwksURL), nil
+}
+
 // NewJWKSAuthMiddleware is the modern, secure constructor for creating JWT authentication middleware.
 // It validates asymmetric RS256 tokens by fetching public keys from a JWKS endpoint.
 // This should be the default choice for all new services.

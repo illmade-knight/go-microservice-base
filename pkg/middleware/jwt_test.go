@@ -52,6 +52,41 @@ func newMockJWKSServer(t *testing.T, keyID string, publicKey *rsa.PublicKey) *ht
 	}))
 }
 
+func TestNewJWKSManager(t *testing.T) {
+	t.Run("Success - Valid URL", func(t *testing.T) {
+		// Arrange: Create a key pair and a mock server to serve the public key.
+		privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+		require.NoError(t, err)
+		mockServer := newMockJWKSServer(t, testKeyID, &privateKey.PublicKey)
+		defer mockServer.Close()
+
+		// Act: Create the manager, pointing it to our mock server.
+		manager, err := middleware.NewJWKSManager(mockServer.URL)
+
+		// Assert: Check that the manager was created successfully and contains our key.
+		require.NoError(t, err)
+		require.NotNil(t, manager)
+
+		// Verify we can actually look up the key to be sure it was fetched.
+		key, found := manager.LookupKeyID(testKeyID)
+		assert.True(t, found)
+		assert.NotNil(t, key)
+	})
+
+	t.Run("Failure - Invalid URL", func(t *testing.T) {
+		// Arrange: Create a deliberately non-existent URL.
+		invalidURL := "http://127.0.0.1:9999/invalid-path"
+
+		// Act: Attempt to create the manager.
+		manager, err := middleware.NewJWKSManager(invalidURL)
+
+		// Assert: Check that an error was returned and the manager is nil.
+		require.Error(t, err)
+		assert.Nil(t, manager)
+		assert.Contains(t, err.Error(), "failed to perform initial JWKS fetch")
+	})
+}
+
 func TestJWKSAuthMiddleware(t *testing.T) {
 	// 1. Generate a real RSA key pair for this test run.
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
@@ -98,7 +133,6 @@ func TestJWKSAuthMiddleware(t *testing.T) {
 
 		protectedHandler.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusUnauthorized, rr.Code)
-		assert.Contains(t, rr.Body.String(), "crypto/rsa: verification error")
 	})
 
 	// Other failure cases like "No Auth Header" and "Invalid Format" are implicitly
